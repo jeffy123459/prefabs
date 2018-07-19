@@ -17,6 +17,16 @@ return function(plugin)
 
   local exports = {}
 
+  local state = {
+    followingMouse = false,
+    currentPrefab = nil
+  }
+
+  local function getMouseRay()
+    local ray = plugin:GetMouse().UnitRay
+    return Ray.new(ray.Origin, ray.Direction*5000)
+  end
+
   local function getStorage()
     return ServerStorage:FindFirstChild(Constants.Names.MODEL_CONTAINER)
   end
@@ -103,13 +113,6 @@ return function(plugin)
     return found
   end
 
-  local function moveToCamera(model)
-    local camera = workspace.CurrentCamera
-
-    -- Not messing with orientation at all, just using the camera's position
-    model:SetPrimaryPartCFrame(CFrame.new(camera.CFrame.p))
-  end
-
   local function applySettings(prefab)
     if globalSettings:Get(MAKE_PRIMARY_PART_INVISIBLE) then
       prefab.PrimaryPart.Transparency = 1
@@ -153,12 +156,15 @@ return function(plugin)
 
     return createPrefabModifier(function(prefab)
       if CollectionService:HasTag(prefab, tag) then
+        -- Allows mouse events to start firing, which is how we move the cloned
+        -- in prefab around.
+        plugin:Activate(true)
+
         local clone = prefab:Clone()
         local selection = SelectionService:Get()[1]
 
-        -- TODO Either move the clone in front of the camera, or fire a ray
-        -- from the center of the camera  and position the model at the position hit.
-        moveToCamera(clone)
+        state.followingMouse = true
+        state.currentPrefab = clone
 
         if selection then
           clone.Parent = selection.Parent
@@ -185,6 +191,25 @@ return function(plugin)
       clone:Destroy()
     end
   end)
+
+  function exports.onMouseMove()
+    local prefab = state.currentPrefab
+    if state.followingMouse and prefab then
+      local ray = getMouseRay()
+      local hit, position = workspace:FindPartOnRayWithIgnoreList(ray, { prefab })
+
+      if hit then
+        local offset = Vector3.new(0, prefab.PrimaryPart.Size.Y/2, 0)
+        prefab:SetPrimaryPartCFrame(CFrame.new(position + offset))
+      end
+    end
+  end
+
+  function exports.onMouseClick()
+    state.followingMouse = false
+    state.currentPrefab = nil
+    plugin:Deactivate()
+  end
 
   return exports
 end
